@@ -11,4 +11,4 @@ RUN cabal install --only-dependencies -j$(nproc)
 COPY . /opt/app
 RUN cabal install
 
-CMD ["kubetrail"]
+CMD kubetrail ; sleep infinity
