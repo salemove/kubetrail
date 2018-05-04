@@ -2,22 +2,24 @@
 
 module Main where
 
-import           Data.Function             ((&))
-import qualified Kubernetes.API.CoreV1
-import           Kubernetes.Client         (dispatchMime)
-import           Kubernetes.ClientHelper   (setMasterURI, disableValidateAuthMethods,
-                                            defaultTLSClientParams, disableServerNameValidation,
-                                            setCAStore, setClientCert, loadPEMCerts, newManager)
-import           Kubernetes.Core           (newConfig, KubernetesConfig)
-import           Kubernetes.KubeConfig     (AuthInfo (..), Cluster (..), Config,
-                                            getAuthInfo, getCluster)
-import           Kubernetes.MimeTypes      (Accept (..), MimeJSON (..))
-import           Network.TLS               (credentialLoadX509, Credential)
-import qualified Network.HTTP.Client       as NH
-import           Data.Yaml                 (decodeFileEither, prettyPrintParseException)
-import           Data.Text                 (unpack)
-import           Control.Arrow             (left)
-import           Control.Monad             (mapM)
+import qualified Data.ByteString.Streaming.Char8 as Q
+import           Data.Function                   ((&))
+import qualified Kubernetes.API.AppsV1
+import           Kubernetes.Client               (dispatchMime)
+import           Kubernetes.ClientHelper         (setMasterURI, disableValidateAuthMethods,
+                                                  defaultTLSClientParams, disableServerNameValidation,
+                                                  setCAStore, setClientCert, loadPEMCerts, newManager)
+import           Kubernetes.Core                 (newConfig, KubernetesConfig)
+import           Kubernetes.KubeConfig           (AuthInfo (..), Cluster (..), Config,
+                                                  getAuthInfo, getCluster)
+import           Kubernetes.MimeTypes            (Accept (..), MimeJSON (..))
+import           Kubernetes.Watch.Client         (dispatchWatch)
+import           Network.TLS                     (credentialLoadX509, Credential)
+import qualified Network.HTTP.Client             as NH
+import           Data.Yaml                       (decodeFileEither, prettyPrintParseException)
+import           Data.Text                       (unpack)
+import           Control.Arrow                   (left)
+import           Control.Monad                   (mapM)
 
 maybeToEither :: String -> Maybe a -> Either String a
 maybeToEither = flip maybe Right . Left
@@ -74,7 +76,5 @@ main :: IO ()
 main = do
     putStrLn "Starting"
     conf <- either error id <$> getConf "/Users/deiwin/.kube/config"
-    uncurry dispatchMime
-        conf
-        (Kubernetes.API.CoreV1.listPodForAllNamespaces (Accept MimeJSON)) >>=
-        print
+    let request = Kubernetes.API.AppsV1.listDeploymentForAllNamespaces (Accept MimeJSON)
+    uncurry dispatchWatch conf request Q.stdout

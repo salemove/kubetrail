@@ -19,6 +19,7 @@ dependencies:
 - aeson
 - text
 - http-client
+- streaming-bytestring
 executables:
   kubetrail:
     main: Main.hs
