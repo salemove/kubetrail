@@ -22,6 +22,7 @@ dependencies:
 - streaming-bytestring
 - streaming
 - json-stream
+- microlens-platform
 executables:
   kubetrail:
     main: Main.hs

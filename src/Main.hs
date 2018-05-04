@@ -10,6 +10,7 @@ import           Data.Aeson                      (FromJSON)
 import           Data.Function                   ((&))
 import qualified Kubernetes.API.AppsV1
 import           Kubernetes.Model                (V1Deployment)
+import qualified Kubernetes.ModelLens            as L
 import           Kubernetes.Client               (dispatchMime)
 import           Kubernetes.ClientHelper         (setMasterURI, disableValidateAuthMethods,
                                                   defaultTLSClientParams, disableServerNameValidation,
@@ -25,6 +26,9 @@ import           Data.Yaml                       (decodeFileEither, prettyPrintP
 import           Data.Text                       (unpack)
 import           Control.Arrow                   (left)
 import           Control.Monad                   (mapM)
+import           Lens.Micro.Platform             ((^.), (^..), to, _Just, each)
+
+type Change = (String, String, [String])
 
 maybeToEither :: String -> Maybe a -> Either String a
 maybeToEither = flip maybe Right . Left
@@ -93,11 +97,21 @@ parseEvent ::
     -> S.Stream (S.Of [a]) m r
 parseEvent parser byteStream = S.map (parseByteString parser) (S.mapped Q.toStrict byteStream)
 
+commitMessageFor :: Change -> String
+commitMessageFor ("ADDED", name, images) = "Add deployment " ++ name
+commitMessageFor ("MODIFIED", name, images) = "Update deployment " ++ name
+commitMessageFor (t, _, _) = error $ "Unexpected type: " ++ t
+
 main :: IO ()
 main = do
     putStrLn "Starting"
     conf <- either error id <$> getConf "/Users/deiwin/.kube/config"
     let request = Kubernetes.API.AppsV1.listDeploymentForAllNamespaces (Accept MimeJSON)
     let eventParser :: Parser (WatchEvent V1Deployment) = value
-    let withResponseBody body = streamParse eventParser body & S.map (map (\x -> (eventType x, eventObject x)))
+    let deployNameL = to eventObject . L.v1DeploymentMetadataL . _Just . L.v1ObjectMetaNameL . _Just . to unpack
+    let deploySpecL = to eventObject .  L.v1DeploymentSpecL . _Just
+    let podSpecL = deploySpecL . L.v1DeploymentSpecTemplateL .  L.v1PodTemplateSpecSpecL . _Just
+    let imagesL = podSpecL .  L.v1PodSpecContainersL . each .  L.v1ContainerImageL . _Just . to unpack
+    let m x = ((unpack . eventType) x, x^.deployNameL, x^..imagesL)
+    let withResponseBody body = streamParse eventParser body & S.map (map (commitMessageFor . m))
     uncurry dispatchWatch conf request (S.print . withResponseBody)
