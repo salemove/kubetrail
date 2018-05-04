@@ -20,6 +20,8 @@ dependencies:
 - text
 - http-client
 - streaming-bytestring
+- streaming
+- json-stream
 executables:
   kubetrail:
     main: Main.hs

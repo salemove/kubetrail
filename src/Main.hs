@@ -1,10 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
 import qualified Data.ByteString.Streaming.Char8 as Q
+import qualified Streaming.Prelude               as S
+import           Data.JsonStream.Parser          (Parser, parseByteString, value)
+import           Data.Aeson                      (FromJSON)
 import           Data.Function                   ((&))
 import qualified Kubernetes.API.AppsV1
+import           Kubernetes.Model                (V1Deployment)
 import           Kubernetes.Client               (dispatchMime)
 import           Kubernetes.ClientHelper         (setMasterURI, disableValidateAuthMethods,
                                                   defaultTLSClientParams, disableServerNameValidation,
@@ -13,7 +18,7 @@ import           Kubernetes.Core                 (newConfig, KubernetesConfig)
 import           Kubernetes.KubeConfig           (AuthInfo (..), Cluster (..), Config,
                                                   getAuthInfo, getCluster)
 import           Kubernetes.MimeTypes            (Accept (..), MimeJSON (..))
-import           Kubernetes.Watch.Client         (dispatchWatch)
+import           Kubernetes.Watch.Client         (dispatchWatch, WatchEvent, eventType, eventObject)
 import           Network.TLS                     (credentialLoadX509, Credential)
 import qualified Network.HTTP.Client             as NH
 import           Data.Yaml                       (decodeFileEither, prettyPrintParseException)
@@ -72,9 +77,27 @@ getConf path = do
     manager <- buildManager configFile
     return $ combine manager kcfg
 
+-- | Parse the stream using the given parser.
+streamParse ::
+  FromJSON a =>
+    Parser a
+    -> Q.ByteString IO r
+    -> S.Stream (S.Of [a]) IO r
+streamParse parser byteStream = byteStream & Q.lines & parseEvent parser
+
+-- | Parse a single event from the stream.
+parseEvent ::
+  (FromJSON a, Monad m) =>
+    Parser a
+    -> S.Stream (Q.ByteString m) m r
+    -> S.Stream (S.Of [a]) m r
+parseEvent parser byteStream = S.map (parseByteString parser) (S.mapped Q.toStrict byteStream)
+
 main :: IO ()
 main = do
     putStrLn "Starting"
     conf <- either error id <$> getConf "/Users/deiwin/.kube/config"
     let request = Kubernetes.API.AppsV1.listDeploymentForAllNamespaces (Accept MimeJSON)
-    uncurry dispatchWatch conf request Q.stdout
+    let eventParser :: Parser (WatchEvent V1Deployment) = value
+    let withResponseBody body = streamParse eventParser body & S.map (map (\x -> (eventType x, eventObject x)))
+    uncurry dispatchWatch conf request (S.print . withResponseBody)
