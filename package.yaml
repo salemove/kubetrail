@@ -1,0 +1,25 @@
+name: kubetrail
+version: '0.1.0.0'
+category: Web
+author: Author name here
+maintainer: example@example.com
+copyright: 2018 Author name here
+license: BSD3
+homepage: https://github.com/githubuser/kubetrail#readme
+extra-source-files:
+- README.md
+dependencies:
+- base >=4.7 && <5
+- kubernetes
+- kubernetes-watch
+- kubernetes-client-helper
+- kubeconfig
+- tls
+- yaml
+- aeson
+- text
+- http-client
+executables:
+  kubetrail:
+    main: Main.hs
+    source-dirs: src

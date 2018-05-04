@@ -38,7 +38,16 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
-# extra-deps: []
+extra-deps:
+- git: 'https://github.com/kubernetes-client/haskell'
+  commit: 662e34661adf06a8d9346ee6d22b135c4eb97ddd
+  subdirs:
+  - kubernetes
+  - kubernetes-watch
+  - kubernetes-client-helper
+  - kubeconfig
+- katip-0.5.4.0
+- http-types-0.11
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
