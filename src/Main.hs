@@ -24,8 +24,8 @@ import           Network.TLS                     (credentialLoadX509, Credential
 import qualified Network.HTTP.Client             as NH
 import           Data.Yaml                       (decodeFileEither, prettyPrintParseException)
 import           Data.Text                       (unpack)
+import           Data.Traversable                (traverse)
 import           Control.Arrow                   (left)
-import           Control.Monad                   (mapM)
 import           Lens.Micro.Platform             ((^.), (^..), to, _Just, each)
 
 type Change = (String, String, [String])
@@ -42,7 +42,7 @@ buildConf :: Either String Config -> IO (Either String KubernetesConfig)
 buildConf configFile =
     (configFile >>= getCluster)
     & fmap server
-    & mapM (\masterURI ->
+    & traverse (\masterURI ->
         newConfig
         & fmap (setMasterURI masterURI)
         & fmap disableValidateAuthMethods
@@ -63,16 +63,16 @@ buildManager :: Either String Config -> IO (Either String NH.Manager)
 buildManager configFile = do
     let cluster = configFile >>= getCluster
     let caPath = fmap certificateAuthority cluster >>= maybeToEither "CA missing"
-    myCAStore <- mapM loadPEMCerts $ unpack <$> caPath
+    myCAStore <- traverse loadPEMCerts $ unpack <$> caPath
     myCert <- loadCert configFile
     tlsParams <-
-        mapM (\(ca, cert) ->
+        traverse (\(ca, cert) ->
             defaultTLSClientParams
             & fmap disableServerNameValidation
             & fmap (setCAStore ca)
             & fmap (setClientCert cert)
         ) (combine myCAStore myCert)
-    mapM newManager tlsParams
+    traverse newManager tlsParams
 
 getConf :: FilePath -> IO (Either String (NH.Manager, KubernetesConfig))
 getConf path = do
