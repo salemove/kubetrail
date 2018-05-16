@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -97,21 +96,27 @@ parseEvent ::
     -> S.Stream (S.Of [a]) m r
 parseEvent parser byteStream = S.map (parseByteString parser) (S.mapped Q.toStrict byteStream)
 
-commitMessageFor :: Change -> String
-commitMessageFor ("ADDED", name, images) = "Add deployment " ++ name
-commitMessageFor ("MODIFIED", name, images) = "Update deployment " ++ name
-commitMessageFor (t, _, _) = error $ "Unexpected type: " ++ t
+commitMessageFor' :: Change -> String
+commitMessageFor' ("ADDED", name, images) = "Add deployment " ++ name
+commitMessageFor' ("MODIFIED", name, images) = "Update deployment " ++ name
+commitMessageFor' (t, _, _) = error $ "Unexpected type: " ++ t
+commitMessageFor :: WatchEvent V1Deployment -> String
+commitMessageFor = commitMessageFor' . changeFromDeploymentEvent
+
+changeFromDeploymentEvent :: WatchEvent V1Deployment -> Change
+changeFromDeploymentEvent event = ((unpack . eventType) event, event^.deployNameL, event^..imagesL)
+    where deployNameL = to eventObject . L.v1DeploymentMetadataL . _Just . L.v1ObjectMetaNameL . _Just . to unpack
+          imagesL = podSpecL .  L.v1PodSpecContainersL . each .  L.v1ContainerImageL . _Just . to unpack
+          podSpecL = deploySpecL . L.v1DeploymentSpecTemplateL .  L.v1PodTemplateSpecSpecL . _Just
+          deploySpecL = to eventObject .  L.v1DeploymentSpecL . _Just
+
+eventParser :: Parser (WatchEvent V1Deployment)
+eventParser = value
 
 main :: IO ()
 main = do
     putStrLn "Starting"
     conf <- either error id <$> getConf "/Users/deiwin/.kube/config"
     let request = Kubernetes.API.AppsV1.listDeploymentForAllNamespaces (Accept MimeJSON)
-    let eventParser :: Parser (WatchEvent V1Deployment) = value
-    let deployNameL = to eventObject . L.v1DeploymentMetadataL . _Just . L.v1ObjectMetaNameL . _Just . to unpack
-    let deploySpecL = to eventObject .  L.v1DeploymentSpecL . _Just
-    let podSpecL = deploySpecL . L.v1DeploymentSpecTemplateL .  L.v1PodTemplateSpecSpecL . _Just
-    let imagesL = podSpecL .  L.v1PodSpecContainersL . each .  L.v1ContainerImageL . _Just . to unpack
-    let m x = ((unpack . eventType) x, x^.deployNameL, x^..imagesL)
-    let withResponseBody body = streamParse eventParser body & S.map (map (commitMessageFor . m))
+    let withResponseBody body = streamParse eventParser body & S.map (map commitMessageFor)
     uncurry dispatchWatch conf request (S.print . withResponseBody)
